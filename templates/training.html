@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Training - RansomShield</title>
+    <meta name="description"
+        content="Train ML models for ransomware detection using Random Forest, SVM, Decision Trees, kNN, and XGBoost classifiers.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" id="mainNav">
+        <div class="nav-brand">
+            <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+            <span class="brand-text">RansomShield</span>
+            <span class="brand-badge">AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link" id="navDashboard"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="/training" class="nav-link active" id="navTraining"><i class="fas fa-brain"></i> Training</a>
+            <a href="/monitoring" class="nav-link" id="navMonitoring"><i class="fas fa-eye"></i> Live Monitor</a>
+            <a href="/about" class="nav-link" id="navAbout"><i class="fas fa-info-circle"></i> About</a>
+        </div>
+        <div class="nav-status">
+            <div class="status-dot" id="systemStatusDot"></div>
+            <span id="systemStatusText">Connecting...</span>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Training Header -->
+        <section class="page-header">
+            <h1><i class="fas fa-brain"></i> Model Training <span class="gradient-text">Pipeline</span></h1>
+            <p>Train and evaluate ML classifiers on simulated HPC & Disk I/O ransomware data</p>
+        </section>
+
+        <!-- Training Controls -->
+        <section class="training-controls">
+            <div class="card card-controls">
+                <div class="card-header">
+                    <h2><i class="fas fa-cogs"></i> Training Configuration</h2>
+                </div>
+                <div class="card-body">
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <label>Data Rounds</label>
+                            <div class="config-value">7 rounds (5 train / 2 test)</div>
+                        </div>
+                        <div class="config-item">
+                            <label>Training Ransomware</label>
+                            <div class="config-value">4 samples (133b, 17d1, 4f7b, 7fae)</div>
+                        </div>
+                        <div class="config-item">
+                            <label>Test Ransomware</label>
+                            <div class="config-value">22 samples (4 known + 18 unknown)</div>
+                        </div>
+                        <div class="config-item">
+                            <label>Benign Applications</label>
+                            <div class="config-value">4 apps (7zip, aesCrypt, sDelete, dryRun)</div>
+                        </div>
+                        <div class="config-item">
+                            <label>Workloads</label>
+                            <div class="config-value">6 types (BL.0, CL.0, CL.1, CL.2, NL.0, NL.1)</div>
+                        </div>
+                        <div class="config-item">
+                            <label>Classifiers</label>
+                            <div class="config-value">RF, SVM, DT, kNN, XGBoost</div>
+                        </div>
+                    </div>
+                    <div class="training-action">
+                        <button id="btnTrain" class="btn btn-primary btn-lg btn-glow" onclick="startTraining()">
+                            <i class="fas fa-rocket"></i> Start Training Pipeline
+                        </button>
+                        <div class="training-progress" id="trainingProgress" style="display:none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <span class="progress-text" id="progressText">Generating data...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="resultsSection">
+            <h2 class="section-title"><i class="fas fa-table"></i> Classifier Comparison (Table 4 from Paper)</h2>
+
+            <!-- Model Type Tabs -->
+            <div class="tab-bar" id="modelTabs">
+                <button class="tab active" data-model="integrated" onclick="switchModelTab('integrated', this)">
+                    <i class="fas fa-link"></i> Integrated (HPC + I/O)
+                </button>
+                <button class="tab" data-model="hpc" onclick="switchModelTab('hpc', this)">
+                    <i class="fas fa-microchip"></i> HPC Only
+                </button>
+                <button class="tab" data-model="io" onclick="switchModelTab('io', this)">
+                    <i class="fas fa-hard-drive"></i> Disk I/O Only
+                </button>
+            </div>
+
+            <!-- Results Table -->
+            <div class="results-table-wrapper" id="resultsTableWrapper">
+                <table class="results-table" id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Classifier</th>
+                            <th>Balanced Accuracy</th>
+                            <th>F1 Score</th>
+                            <th>Precision</th>
+                            <th>Recall</th>
+                            <th>FPR</th>
+                            <th>FNR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody">
+                        <tr>
+                            <td colspan="7" class="table-empty">
+                                <i class="fas fa-flask"></i> Train models to see results
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Comparison Charts -->
+        <section class="charts-section" id="chartsSection" style="display:none;">
+            <h2 class="section-title"><i class="fas fa-chart-bar"></i> Visual Comparison</h2>
+            <div class="charts-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Accuracy by Classifier</h3>
+                    </div>
+                    <div class="card-body chart-container">
+                        <canvas id="accuracyChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>FPR vs FNR</h3>
+                    </div>
+                    <div class="card-body chart-container">
+                        <canvas id="errorChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p><i class="fas fa-book-open"></i> Based on: <em>"Detection of Ransomware Attacks Using Processor and Disk
+                    Usage Data"</em> — K. Thummapudi, P. Lama, R.V. Boppana (IEEE Access, 2023)</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/training.js"></script>
+</body>
+
+</html>

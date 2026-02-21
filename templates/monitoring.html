@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitor - RansomShield</title>
+    <meta name="description"
+        content="Real-time system monitoring with ML-based ransomware detection using processor and disk usage data.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar" id="mainNav">
+        <div class="nav-brand">
+            <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+            <span class="brand-text">RansomShield</span>
+            <span class="brand-badge">AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="/training" class="nav-link"><i class="fas fa-brain"></i> Training</a>
+            <a href="/monitoring" class="nav-link active"><i class="fas fa-eye"></i> Live Monitor</a>
+            <a href="/about" class="nav-link"><i class="fas fa-info-circle"></i> About</a>
+        </div>
+        <div class="nav-status">
+            <div class="status-dot" id="systemStatusDot"></div>
+            <span id="systemStatusText">Connecting...</span>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="page-header">
+            <h1><i class="fas fa-eye"></i> Live System <span class="gradient-text">Monitoring</span></h1>
+            <p>Real-time CPU & Disk I/O monitoring with ML ransomware detection</p>
+        </section>
+
+        <!-- Monitor Controls -->
+        <section class="monitor-controls">
+            <div class="control-bar">
+                <button id="btnStartMonitor" class="btn btn-primary btn-glow" onclick="toggleMonitoring()">
+                    <i class="fas fa-play" id="monitorIcon"></i>
+                    <span id="monitorBtnText">Start Monitoring</span>
+                </button>
+                <div class="control-info">
+                    <div class="info-badge" id="monitorInterval">
+                        <i class="fas fa-clock"></i> Interval: 1s
+                    </div>
+                    <div class="info-badge" id="detectionCount">
+                        <i class="fas fa-search"></i> Detections: <span id="detCountValue">0</span>
+                    </div>
+                    <div class="info-badge alert-badge" id="alertBadge" style="display:none;">
+                        <i class="fas fa-exclamation-triangle"></i> <span id="alertText">ALERT</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Charts -->
+        <section class="live-charts">
+            <div class="charts-grid-2">
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3><i class="fas fa-microchip"></i> CPU Usage (Real-time)</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="liveCpuChart" height="200"></canvas>
+                    </div>
+                </div>
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3><i class="fas fa-hard-drive"></i> Disk I/O (Real-time)</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="liveDiskChart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detection Timeline -->
+        <section class="detection-timeline">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-timeline"></i> Detection Probability Timeline</h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="detectionTimeline" height="150"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Stats & Alerts -->
+        <section class="live-grid">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-gauge-high"></i> Live Metrics</h3>
+                </div>
+                <div class="card-body">
+                    <div class="live-metrics" id="liveMetrics">
+                        <div class="live-metric">
+                            <span class="live-metric-label">CPU Average</span>
+                            <span class="live-metric-value" id="liveCpuAvg">--</span>
+                        </div>
+                        <div class="live-metric">
+                            <span class="live-metric-label">Memory Used</span>
+                            <span class="live-metric-value" id="liveMemUsed">--</span>
+                        </div>
+                        <div class="live-metric">
+                            <span class="live-metric-label">Disk Read Rate</span>
+                            <span class="live-metric-value" id="liveDiskRead">--</span>
+                        </div>
+                        <div class="live-metric">
+                            <span class="live-metric-label">Disk Write Rate</span>
+                            <span class="live-metric-value" id="liveDiskWrite">--</span>
+                        </div>
+                        <div class="live-metric">
+                            <span class="live-metric-label">Detection Result</span>
+                            <span class="live-metric-value" id="liveDetection">--</span>
+                        </div>
+                        <div class="live-metric">
+                            <span class="live-metric-label">Confidence</span>
+                            <span class="live-metric-value" id="liveConfidence">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-bell"></i> Alert Log</h3>
+                    <button class="btn btn-sm btn-outline" onclick="clearAlerts()">Clear</button>
+                </div>
+                <div class="card-body">
+                    <div class="alert-log" id="alertLog">
+                        <div class="log-empty">
+                            <i class="fas fa-check-circle"></i>
+                            <p>No alerts. System is being monitored.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p><i class="fas fa-book-open"></i> Based on: <em>"Detection of Ransomware Attacks Using Processor and Disk
+                    Usage Data"</em> — K. Thummapudi, P. Lama, R.V. Boppana (IEEE Access, 2023)</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/monitoring.js"></script>
+</body>
+
+</html>

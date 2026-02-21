@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - RansomShield</title>
+    <meta name="description"
+        content="Learn about the ransomware detection methodology based on HPC and disk I/O data analysis using machine learning.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar" id="mainNav">
+        <div class="nav-brand">
+            <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+            <span class="brand-text">RansomShield</span>
+            <span class="brand-badge">AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="/training" class="nav-link"><i class="fas fa-brain"></i> Training</a>
+            <a href="/monitoring" class="nav-link"><i class="fas fa-eye"></i> Live Monitor</a>
+            <a href="/about" class="nav-link active"><i class="fas fa-info-circle"></i> About</a>
+        </div>
+        <div class="nav-status">
+            <div class="status-dot" id="systemStatusDot"></div>
+            <span id="systemStatusText">Connecting...</span>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="page-header">
+            <h1><i class="fas fa-info-circle"></i> About <span class="gradient-text">RansomShield</span></h1>
+            <p>Understanding the research methodology and system architecture</p>
+        </section>
+
+        <!-- Paper Reference -->
+        <section class="about-section">
+            <div class="card card-paper">
+                <div class="card-header">
+                    <h2><i class="fas fa-file-alt"></i> Research Paper</h2>
+                </div>
+                <div class="card-body">
+                    <div class="paper-info">
+                        <h3>"Detection of Ransomware Attacks Using Processor and Disk Usage Data"</h3>
+                        <p class="paper-authors">
+                            <strong>Authors:</strong> Kumar Thummapudi, Palden Lama, Rajendra V. Boppana
+                        </p>
+                        <p class="paper-venue">
+                            <strong>Published:</strong> IEEE Access, Volume 11, 2023 (pp. 51395–51407)
+                        </p>
+                        <p class="paper-doi">
+                            <strong>DOI:</strong> 10.1109/ACCESS.2023.3279819
+                        </p>
+                        <p class="paper-institution">
+                            <strong>Institution:</strong> Department of Computer Science, The University of Texas at San
+                            Antonio
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Methodology -->
+        <section class="about-section">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-diagram-project"></i> Methodology</h2>
+                </div>
+                <div class="card-body">
+                    <div class="methodology-flow">
+                        <div class="flow-step">
+                            <div class="flow-number">1</div>
+                            <div class="flow-content">
+                                <h4>Data Collection</h4>
+                                <p>Monitor Hardware Performance Counters (HPCs) for 5 processor events and 8 disk I/O
+                                    events from the <strong>host machine</strong> level. HPC data sampled at 5ms
+                                    intervals; disk I/O at 20ms intervals.</p>
+                            </div>
+                        </div>
+                        <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                        <div class="flow-step">
+                            <div class="flow-number">2</div>
+                            <div class="flow-content">
+                                <h4>Feature Engineering</h4>
+                                <p>Group 40 HPC samples into 200ms instances. Compute 4 statistical features (mean,
+                                    median, std, IQR) per event. This yields <strong>20 HPC features + 32 I/O features =
+                                        52 integrated features</strong>.</p>
+                            </div>
+                        </div>
+                        <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                        <div class="flow-step">
+                            <div class="flow-number">3</div>
+                            <div class="flow-content">
+                                <h4>Model Training</h4>
+                                <p>Train with 5 data rounds using 4 ransomware samples (3 families) + 4 benign
+                                    applications across 6 workload scenarios. 21-fold cross-validation.</p>
+                            </div>
+                        </div>
+                        <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                        <div class="flow-step">
+                            <div class="flow-number">4</div>
+                            <div class="flow-content">
+                                <h4>Detection</h4>
+                                <p>The RF-Integrated model achieves <strong>0.92 balanced accuracy</strong> and detects
+                                    ransomware in the first 200ms instance <strong>95% of the time</strong>. Within
+                                    400ms, detection probability is <strong>98%</strong>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- HPC Events -->
+        <section class="about-section">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-microchip"></i> HPC Events Monitored</h2>
+                </div>
+                <div class="card-body">
+                    <div class="events-grid">
+                        <div class="event-item">
+                            <div class="event-tag hpc-tag">HPC</div>
+                            <h4>LLC-stores</h4>
+                            <p>Last Level Cache store operations. Ransomware causes elevated cache activity due to
+                                intensive data processing during encryption.</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag hpc-tag">HPC</div>
+                            <h4>L1-icache-load-misses</h4>
+                            <p>Level 1 instruction cache load misses. New code patterns from ransomware encryption
+                                routines cause increased misses.</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag hpc-tag">HPC</div>
+                            <h4>branch-load-misses</h4>
+                            <p>Branch prediction load misses. Ransomware's encryption loops create unusual branch
+                                patterns.</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag hpc-tag">HPC</div>
+                            <h4>node-load-misses</h4>
+                            <p>NUMA node load misses. Heavy data access patterns from file encryption cause cross-node
+                                memory access.</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag hpc-tag">HPC</div>
+                            <h4>instructions</h4>
+                            <p>Total instructions executed. Fixed counter that captures overall processing activity
+                                level.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- I/O Events -->
+        <section class="about-section">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-hard-drive"></i> Disk I/O Events Monitored</h2>
+                </div>
+                <div class="card-body">
+                    <div class="events-grid events-grid-4">
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>rd_req</h4>
+                            <p>Read requests count</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>rd_bytes</h4>
+                            <p>Read bytes transferred</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>wr_req</h4>
+                            <p>Write requests count</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>wr_bytes</h4>
+                            <p>Write bytes transferred</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>flush_req</h4>
+                            <p>Flush requests count</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>flush_total_times</h4>
+                            <p>Total flush time (ns)</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>rd_total_times</h4>
+                            <p>Total read time (ns)</p>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-tag io-tag">I/O</div>
+                            <h4>wr_total_times</h4>
+                            <p>Total write time (ns)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ML Classifiers -->
+        <section class="about-section">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-brain"></i> ML Classifiers</h2>
+                </div>
+                <div class="card-body">
+                    <div class="classifiers-grid">
+                        <div class="classifier-item best">
+                            <div class="classifier-badge"><i class="fas fa-trophy"></i> Best</div>
+                            <h4>Random Forest (RF)</h4>
+                            <p>Ensemble of decision trees. Best balanced accuracy (0.92) with lowest training time. Uses
+                                scikit-learn.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>Support Vector Machine (SVM)</h4>
+                            <p>RBF kernel classifier. Good for high-dimensional feature spaces. Uses scikit-learn.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>Decision Trees (DT)</h4>
+                            <p>Single tree classifier. Interpretable but prone to overfitting. Uses scikit-learn.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>k-Nearest Neighbors (kNN)</h4>
+                            <p>Instance-based learning with k=5. Simple but computationally intensive at test time.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>XGBoost</h4>
+                            <p>Extreme Gradient Boosting. Second-best accuracy but 3× training time vs RF. Uses xgboost
+                                library.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>DNN (Deep Neural Network)</h4>
+                            <p>Auto-tuned with AutoKeras. Requires significant hyperparameter tuning.</p>
+                        </div>
+                        <div class="classifier-item">
+                            <h4>LSTM</h4>
+                            <p>Long Short-Term Memory network with 64 units. Uses raw sequential data with masking
+                                layer.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Results -->
+        <section class="about-section">
+            <div class="card card-results">
+                <div class="card-header">
+                    <h2><i class="fas fa-award"></i> Key Results</h2>
+                </div>
+                <div class="card-body">
+                    <div class="key-results-grid">
+                        <div class="key-result">
+                            <div class="key-number" style="--accent: #00d4ff;">0.92</div>
+                            <p>Balanced Accuracy<br>(RF-Integrated Model)</p>
+                        </div>
+                        <div class="key-result">
+                            <div class="key-number" style="--accent: #7c3aed;">400ms</div>
+                            <p>Detection Time<br>(98% probability)</p>
+                        </div>
+                        <div class="key-result">
+                            <div class="key-number" style="--accent: #10b981;">0.03</div>
+                            <p>False Positive Rate<br>(RF-Integrated)</p>
+                        </div>
+                        <div class="key-result">
+                            <div class="key-number" style="--accent: #f59e0b;">0.97</div>
+                            <p>ROC AUC<br>(Multi-workload training)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p><i class="fas fa-book-open"></i> Based on: <em>"Detection of Ransomware Attacks Using Processor and Disk
+                    Usage Data"</em> — K. Thummapudi, P. Lama, R.V. Boppana (IEEE Access, 2023)</p>
+        </div>
+    </footer>
+
+    <script>
+        // Minimal status check for the About page
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/system-status');
+                const data = await res.json();
+                const dot = document.getElementById('systemStatusDot');
+                const text = document.getElementById('systemStatusText');
+                if (data.success) {
+                    dot.className = 'status-dot connected';
+                    text.textContent = 'System Online';
+                }
+            } catch (e) { }
+        }
+        document.addEventListener('DOMContentLoaded', checkStatus);
+    </script>
+</body>
+
+</html>
