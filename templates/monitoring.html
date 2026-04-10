@@ -47,6 +47,15 @@
                     <span id="monitorBtnText">Start Monitoring</span>
                 </button>
                 <div class="control-info">
+                    <!-- ENTERPRISE AUTO-KILL TOGGLE -->
+                    <div class="info-badge threat-toggle" style="background: rgba(220,53,69,0.1); border: 1px solid var(--danger);">
+                        <i class="fas fa-radiation"></i> Auto-Kill
+                        <label class="switch" style="margin-left: 10px;">
+                            <input type="checkbox" id="autoKillToggle" onchange="toggleAutoKill()">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
                     <div class="info-badge" id="monitorInterval">
                         <i class="fas fa-clock"></i> Interval: 1s
                     </div>

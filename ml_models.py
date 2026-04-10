@@ -88,7 +88,7 @@ def get_classifier(name):
     """Initialize ML classifier by name."""
     classifiers = {
         "Random Forest": RandomForestClassifier(
-            n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1
+            n_estimators=100, random_state=RANDOM_STATE, n_jobs=1
         ),
         "SVM": SVC(
             kernel='rbf', probability=True, random_state=RANDOM_STATE
@@ -97,12 +97,13 @@ def get_classifier(name):
             random_state=RANDOM_STATE
         ),
         "kNN": KNeighborsClassifier(
-            n_neighbors=5, n_jobs=-1
+            n_neighbors=5, n_jobs=1
         ),
         "XGBoost": XGBClassifier(
             n_estimators=100, random_state=RANDOM_STATE,
             eval_metric='logloss',
-            verbosity=0
+            verbosity=0,
+            n_jobs=1
         ),
     }
     return classifiers.get(name)

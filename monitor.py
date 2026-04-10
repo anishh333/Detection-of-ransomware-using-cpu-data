@@ -10,6 +10,8 @@ import numpy as np
 import joblib
 import os
 import json
+import ctypes
+import struct
 from collections import deque
 from config import HPC_EVENTS, IO_EVENTS, STAT_FEATURES, MODEL_DIR
 
@@ -47,7 +49,41 @@ class SystemMonitor:
             self.model_loaded = False
 
         self.is_monitoring = False
+        self.monitor_thread = None
+        self.process_io_state = {}
+        self.process_io_delta = {}
         self.detection_history = []
+        
+        # New Enterprise Fields
+        self.ignored_pids = set()
+        self.auto_kill_enabled = False
+        
+        # Initialize Canary Handler
+        try:
+            from canary_manager import CanaryManager
+            self.canary_manager = CanaryManager(self)
+        except ImportError:
+            self.canary_manager = None
+
+    def start_background_monitoring(self):
+        if not self.is_monitoring:
+            self.is_monitoring = True
+            if self.canary_manager:
+                self.canary_manager.start()
+            import threading
+            self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            self.monitor_thread.start()
+
+    def stop_background_monitoring(self):
+        self.is_monitoring = False
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=1.0)
+        if hasattr(self, 'canary_manager') and self.canary_manager:
+            self.canary_manager.stop()
+    def _monitor_loop(self):
+        while self.is_monitoring:
+            self.run_detection_cycle()
+            time.sleep(self.sampling_interval)
 
     def collect_sample(self):
         """Collect one sample of system metrics."""
@@ -80,7 +116,6 @@ class SystemMonitor:
             "wr_total_times": disk_io.write_time if disk_io else 0,
         }
 
-        # Add to buffers
         for event in HPC_EVENTS:
             self.hpc_buffer[event].append(hpc_sample[event])
         for event in IO_EVENTS:
@@ -170,11 +205,128 @@ class SystemMonitor:
 
         return status
 
+    def _identify_threat(self):
+        """Scans running processes to identify the likely ransomware process based on CPU/Disk I/O."""
+        highest_cpu = 0
+        highest_io = 0
+        suspect = None
+        
+        # System whitelist
+        protected_procs = {
+            'system', 'idle', 'smss.exe', 'csrss.exe', 'wininit.exe', 
+            'services.exe', 'lsass.exe', 'lsm.exe', 'svchost.exe', 
+            'explorer.exe', 'winlogon.exe', 'spoolsv.exe', 'taskmgr.exe'
+        }
+
+        whitelisted_procs = {
+            'brave.exe', 'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe',
+            'code.exe', 'idea64.exe', 'pycharm64.exe', 'devenv.exe', 'webstorm.exe',
+            'python.exe', 'pythonw.exe', 'node.exe', 'java.exe', 'javaw.exe',
+            'docker.exe', 'vmmem', 'discord.exe', 'slack.exe', 'teams.exe', 'zoom.exe',
+            'antigravity.exe', 'language_server_windows_x64.exe', 'rg.exe', 'cmd.exe', 'powershell.exe'
+        }
+        protected_procs.update(whitelisted_procs)
+
+        initial_state = {}
+        for p in psutil.process_iter(['pid', 'io_counters']):
+            try:
+                io_write = p.info['io_counters'].write_bytes if p.info.get('io_counters') else 0
+                initial_state[p.info['pid']] = io_write
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        time.sleep(0.2)
+
+        try:
+            for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'io_counters', 'username', 'exe']):
+                try:
+                    pid = p.info['pid']
+                    if pid in self.ignored_pids:
+                        continue
+                        
+                    name = p.info['name'].lower()
+                    
+                    # Absolute Path Verification
+                    path = p.info.get('exe', "") or ""
+                    lower_path = path.lower()
+                    
+                    if name in protected_procs:
+                        # Only trust it if it lives in a standard trustworthy directory
+                        if "windows\\system32" in lower_path or "program files" in lower_path or "appdata\\local\\programs" in lower_path:
+                            continue
+                        
+                    username = p.info.get('username')
+                    if username and ('SYSTEM' in username or 'AUTHORITY' in username):
+                         continue
+
+                    cpu = p.info['cpu_percent'] or 0
+                    
+                    io_write = p.info['io_counters'].write_bytes if p.info.get('io_counters') else 0
+                    prev_write = initial_state.get(pid, io_write)
+                    io_delta = io_write - prev_write
+                    
+                    if cpu > highest_cpu or io_delta > highest_io:
+                        highest_cpu = cpu
+                        highest_io = io_delta
+                        suspect = p
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+        except Exception as e:
+            print(f"Error scanning processes: {e}")
+
+        if not suspect:
+            return {"name": "Unknown", "pid": -1, "path": "Unknown", "category": "General Anomaly", "is_signed": False}
+
+        try:
+            path = suspect.exe()
+        except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+            path = "Access Denied"
+
+        is_signed = False
+        if path and path != "Access Denied":
+             lower_path = path.lower()
+             if "windows\\system32" in lower_path or "microsoft" in lower_path or "program files" in lower_path:
+                 if "appdata" not in lower_path and "temp" not in lower_path:
+                     is_signed = True
+                     
+        category = "High Processor/IO Anomaly"
+        if highest_io > 10 * 1024 * 1024:  # > 10MB write in this tick
+            category = "High Disk Write Anomaly"
+        elif highest_cpu > 50:
+            category = "High CPU Utilization Anomaly"
+
+        return {
+            "name": suspect.info['name'],
+            "pid": suspect.info['pid'],
+            "path": path,
+            "category": category,
+            "is_signed": is_signed,
+            "username": suspect.info.get('username', 'Unknown')
+        }
+
     def run_detection_cycle(self):
         """Run one detection cycle: collect, compute, predict."""
         hpc_sample, io_sample = self.collect_sample()
         features = self.compute_features()
         prediction, probability = self.predict(features)
+        
+        # Require higher confidence (> 0.85) to heavily reduce false positives
+        is_ransomware = (prediction == 1 and probability > 0.85) if prediction is not None else None
+        
+        # Identify threat if ransomware detected
+        threat_info = None
+        if is_ransomware:
+            threat_info = self._identify_threat()
+            
+            # Autonomous Kill Logic
+            if self.auto_kill_enabled and probability >= 0.95 and threat_info['pid'] != -1 and threat_info['pid'] not in self.ignored_pids:
+                try:
+                    print(f"[!] AUTONOMOUS KILL ENGAGED: Terminating {threat_info['name']} (PID: {threat_info['pid']})")
+                    p = psutil.Process(threat_info['pid'])
+                    p.terminate()
+                    threat_info["killed_by_ai"] = True
+                except Exception as e:
+                    print(f"[-] Auto-Kill failed: {e}")
 
         result = {
             "timestamp": time.time(),
@@ -182,7 +334,8 @@ class SystemMonitor:
             "io_sample": io_sample,
             "prediction": prediction,
             "probability": probability,
-            "is_ransomware": prediction == 1 if prediction is not None else None,
+            "is_ransomware": is_ransomware,
+            "threat_info": threat_info
         }
 
         self.detection_history.append(result)

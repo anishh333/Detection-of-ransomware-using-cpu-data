@@ -171,7 +171,7 @@ function toggleMonitoring() {
         icon.className = 'fas fa-stop';
         text.textContent = 'Stop Monitoring';
         btn.classList.remove('btn-glow');
-        monitorTimer = setInterval(runMonitorCycle, 1000);
+        monitorTimer = setInterval(runMonitorCycle, 200);
         runMonitorCycle(); // Run immediately
     }
 }
@@ -215,7 +215,7 @@ async function runMonitorCycle() {
         detEl.style.color = '#ef4444';
         confEl.textContent = (prob * 100).toFixed(1) + '%';
         confEl.style.color = '#ef4444';
-        addAlert(now, prob);
+        addAlert(now, prob, detection.threat_info);
     } else {
         detEl.textContent = '✅ SAFE';
         detEl.style.color = '#10b981';
@@ -254,8 +254,21 @@ async function runMonitorCycle() {
     timelineChart.data.datasets[0].data = [...probData];
     timelineChart.update('none');
 }
+let lastAlertTimestamp = 0;
+let lastAlertPid = -1;
 
-function addAlert(time, probability) {
+function addAlert(time, probability, threatInfo) {
+    const currentTime = Date.now();
+    const currentPid = threatInfo ? threatInfo.pid : -1;
+    
+    // Throttle duplicate alerts for the same PID to once every 10 seconds
+    if (currentPid === lastAlertPid && (currentTime - lastAlertTimestamp) < 10000) {
+        return; // Skip flooding the UI with identical alerts
+    }
+    
+    lastAlertTimestamp = currentTime;
+    lastAlertPid = currentPid;
+
     alertCount++;
     const alertBadge = document.getElementById('alertBadge');
     alertBadge.style.display = 'flex';
@@ -266,15 +279,84 @@ function addAlert(time, probability) {
     if (empty) empty.remove();
 
     const entry = document.createElement('div');
-    entry.className = 'log-entry danger';
+
+    // Determine Alert Color based on Signature & I/O
+    let alertClass = 'danger'; // default Red
+    let alertIcon = 'fa-skull-crossbones';
+
+    if (threatInfo) {
+        if (threatInfo.is_signed) {
+            alertClass = 'warning'; // Yellow for signed
+            alertIcon = 'fa-shield-virus';
+        }
+    }
+
+    entry.className = `log-entry ${alertClass}`;
+    entry.style.flexDirection = 'column';
+    entry.style.alignItems = 'stretch';
+    entry.style.gap = '8px';
+
+    let threatDetailsHtml = '';
+    if (threatInfo && threatInfo.pid !== -1) {
+        
+        let killedHtml = '';
+        if (threatInfo.killed_by_ai) {
+            killedHtml = `<div style="color: #ef4444; font-weight: bold; margin-top: 5px;"><i class="fas fa-biohazard"></i> TERMINATED BY AUTO-KILL ENGINE</div>`;
+        }
+        
+        threatDetailsHtml = `
+            <div class="threat-details" style="font-size: 0.9em; margin-top: 5px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                <div><strong>Process:</strong> ${threatInfo.name} (PID: ${threatInfo.pid})</div>
+                <div><strong>Path:</strong> <span style="font-family: monospace; font-size: 0.85em;">${threatInfo.path}</span></div>
+                <div><strong>Category:</strong> ${threatInfo.category}</div>
+                <div><strong>Signed:</strong> ${threatInfo.is_signed ? '<span style="color:#f59e0b">Yes (May be system update)</span>' : '<span style="color:#ef4444">No (Suspicious)</span>'}</div>
+                ${killedHtml}
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button onclick="confirmKillProcess(${threatInfo.pid}, '${threatInfo.name}')" class="btn btn-sm" style="background: #ef4444; color: white; border: none; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+                        <i class="fas fa-times-circle"></i> Kill
+                    </button>
+                    <button onclick="ignoreProcess(${threatInfo.pid})" class="btn btn-sm" style="background: #64748b; color: white; border: none; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+                        <i class="fas fa-eye-slash"></i> Ignore
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        <span class="log-message">⚠️ Potential ransomware activity detected</span>
-        <span class="log-prob" style="color:#ef4444">${(probability * 100).toFixed(1)}%</span>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+            <span>
+                <span class="log-time">${time}</span>
+                <span class="log-message"><i class="fas ${alertIcon}"></i> Potential ransomware activity detected</span>
+            </span>
+            <span class="log-prob" style="color: ${alertClass === 'warning' ? '#f59e0b' : '#ef4444'}">${(probability * 100).toFixed(1)}%</span>
+        </div>
+        ${threatDetailsHtml}
     `;
     log.insertBefore(entry, log.firstChild);
 
     while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+async function confirmKillProcess(pid, name) {
+    if (confirm(`CRITICAL WARNING:\n\nAre you sure you want to terminate the process '${name}' (PID: ${pid})?\n\nIf this is a critical system process, your computer may crash (Blue Screen).`)) {
+        try {
+            const res = await fetch('/api/kill-process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pid: pid })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                alert(`Success: ${data.message}`);
+            } else {
+                alert(`Failed to terminate process:\n\n${data.error}`);
+            }
+        } catch (e) {
+            alert(`Network error occurred while trying to kill the process.`);
+        }
+    }
 }
 
 function clearAlerts() {
@@ -295,4 +377,44 @@ function formatBytes(bytes) {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+async function toggleAutoKill() {
+    const isChecked = document.getElementById('autoKillToggle').checked;
+    
+    if (isChecked) {
+        if (!confirm("⚠️ WARNING: Autonomous Kill Mode is DANGEROUS.\n\nThe ML engine will instantly terminate any process it flags with > 95% confidence without your permission. Do you want to enable this?")) {
+            document.getElementById('autoKillToggle').checked = false;
+            return;
+        }
+    }
+    
+    try {
+        const res = await fetch('/api/toggle-autokill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: isChecked })
+        });
+        const data = await res.json();
+        console.log(data.message);
+    } catch (e) {
+        console.error("Failed to toggle auto-kill", e);
+    }
+}
+
+async function ignoreProcess(pid) {
+    try {
+        const res = await fetch('/api/ignore-pid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pid: pid })
+        });
+        const data = await res.json();
+        if (data.success) {
+            clearAlerts(); // Reset UI 
+            alert(`Process ${pid} is now muted and ignored by the ML engine.`);
+        }
+    } catch (e) {
+        alert('Failed to ignore process.');
+    }
 }

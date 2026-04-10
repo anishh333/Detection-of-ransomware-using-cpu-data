@@ -242,10 +242,22 @@ function addLogEntry(data) {
     
     const entry = document.createElement('div');
     entry.className = `log-entry ${className}`;
+    entry.style.flexDirection = 'column';
+    entry.style.alignItems = 'stretch';
+    entry.style.gap = '4px';
+
+    let pathHtml = '';
+    if (isRansomware && data.threat_info && data.threat_info.path) {
+        pathHtml = `<div style="font-family: monospace; font-size: 0.85em; opacity: 0.8; margin-left: 55px; word-break: break-all;"><i class="fas fa-folder-open"></i> ${data.threat_info.path}</div>`;
+    }
+
     entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        <span class="log-message">${message}</span>
-        <span class="log-prob" style="color:${isRansomware ? '#ef4444' : '#10b981'}">${(prob * 100).toFixed(1)}%</span>
+        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+            <span class="log-time">${time}</span>
+            <span class="log-message" style="flex: 1;">${message}</span>
+            <span class="log-prob" style="color:${isRansomware ? '#ef4444' : '#10b981'}">${(prob * 100).toFixed(1)}%</span>
+        </div>
+        ${pathHtml}
     `;
     
     log.insertBefore(entry, log.firstChild);
