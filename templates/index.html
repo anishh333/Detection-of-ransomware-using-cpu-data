@@ -206,7 +206,7 @@
             <!-- Detection Log Card -->
             <div class="card card-detection" id="detectionCard">
                 <div class="card-header">
-                    <h2><i class="fas fa-scroll"></i> Detection Log</h2>
+                    <h2><i class="fas fa-scroll"></i> Dynamic Detection Log</h2>
                     <button class="btn btn-sm btn-outline" onclick="clearLog()">
                         <i class="fas fa-trash-alt"></i> Clear
                     </button>
@@ -215,7 +215,23 @@
                     <div class="detection-log" id="detectionLog">
                         <div class="log-empty">
                             <i class="fas fa-shield-halved"></i>
-                            <p>No detection events yet. Start monitoring to see activity.</p>
+                            <p>No dynamic detection events yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EMBER Static Protection Card -->
+            <div class="card card-detection" id="emberCard">
+                <div class="card-header">
+                    <h2><i class="fas fa-shield-virus"></i> EMBER Real-Time Static Protection</h2>
+                    <span class="card-badge success">Active</span>
+                </div>
+                <div class="card-body">
+                    <div class="detection-log" id="emberLog">
+                        <div class="log-empty">
+                            <i class="fas fa-folder-open"></i>
+                            <p>Monitoring Downloads... No files intercepted yet.</p>
                         </div>
                     </div>
                 </div>

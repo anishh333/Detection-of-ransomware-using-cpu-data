@@ -20,7 +20,7 @@ def run_benchmark():
     print("="*60)
 
     # 1. Measure Inference Latency
-    print("\n[1/3] Measuring Inference Latency...")
+    print("\n[1/4] Measuring Inference Latency...")
     monitor = SystemMonitor()
     if not monitor.model_loaded:
         print("Error: Model not loaded. Please train the model first.")
@@ -42,7 +42,7 @@ def run_benchmark():
     print(f"  Minimum Inference Latency: {min_latency:.4f} ms")
 
     # 2. Analyze Dataset Time-to-Detect (TTD)
-    print("\n[2/3] Analyzing Dataset Time-to-Detect (TTD)...")
+    print("\n[2/4] Analyzing Dataset Time-to-Detect (TTD)...")
     dataset_path = os.path.join(DATA_DIR, "ransomware_dataset.csv")
     if not os.path.exists(dataset_path):
         print("  Error: Dataset not found. Generating sample traces for verification...")
@@ -75,8 +75,43 @@ def run_benchmark():
         detections_under_400ms = len([t for t in valid_ttds if t <= 400])
         print(f"  Detections <= 400ms: {detections_under_400ms} / {len(valid_ttds)} ({detections_under_400ms/len(valid_ttds)*100:.1f}%)")
 
-    # 3. Component Breakdown
-    print("\n[3/3] System Breakdown:")
+    # 3. Validating Model Accuracy
+    print("\n[3/4] Validating Model Accuracy (98%+ Target)...")
+    
+    if all(col in dataset.columns for col in feature_cols):
+        from sklearn.metrics import accuracy_score, precision_score, recall_score
+        X_test = dataset[feature_cols]
+        # Allow 'label' or 'class' column
+        target_col = 'label' if 'label' in dataset.columns else 'class' if 'class' in dataset.columns else None
+        
+        if target_col:
+            y_test = dataset[target_col].apply(lambda x: 1 if x == 'ransomware' else 0)
+            
+            if monitor.scaler:
+                X_test_scaled = monitor.scaler.transform(X_test)
+            else:
+                X_test_scaled = X_test
+                
+            predictions = monitor.model.predict(X_test_scaled)
+            accuracy = accuracy_score(y_test, predictions) * 100
+            precision = precision_score(y_test, predictions, zero_division=0) * 100
+            recall = recall_score(y_test, predictions, zero_division=0) * 100
+            
+            print(f"  Overall Accuracy: {accuracy:.2f}%")
+            print(f"  Precision: {precision:.2f}%")
+            print(f"  Recall: {recall:.2f}%")
+            
+            if accuracy >= 98.0:
+                print("  [+] SUCCESS: Model meets or exceeds the 98% accuracy guarantee.")
+            else:
+                print(f"  [-] WARNING: Model accuracy ({accuracy:.2f}%) falls short of the 98% target.")
+        else:
+            print("  Warning: No label column found in dataset, cannot calculate accuracy.")
+    else:
+        print("  Warning: Dataset columns do not match model features. Cannot run accuracy test.")
+
+    # 4. Component Breakdown
+    print("\n[4/4] System Breakdown:")
     print(f"  Sampling Interval: {INSTANCE_DURATION_MS} ms")
     print(f"  Processing Overhead: ~{avg_latency:.2f} ms")
     print(f"  Total Cycle Time: ~{INSTANCE_DURATION_MS + avg_latency:.2f} ms")

@@ -16,6 +16,7 @@ from config import (
     TEMPLATE_DIR, STATIC_DIR, HPC_EVENTS, IO_EVENTS, BASE_DIR
 )
 from monitor import SystemMonitor
+from ember_core.download_watcher import start_watcher
 
 # Ensure project root is on sys.path so local modules can be imported
 if BASE_DIR not in sys.path:
@@ -28,6 +29,10 @@ app = Flask(__name__,
 # Initialize system monitor and start background thread
 monitor = SystemMonitor()
 monitor.start_background_monitoring()
+
+# Initialize EMBER static download monitor
+static_scan_logs = []
+watcher_observer = start_watcher(shared_logs=static_scan_logs)
 
 
 # ==================== WEB ROUTES ====================
@@ -239,6 +244,11 @@ def api_toggle_autokill():
     return jsonify({"success": True, "message": f"Auto-Kill {mode}"})
 
 
+@app.route("/api/static-logs")
+def api_static_logs():
+    """Get the latest EMBER static scans."""
+    return jsonify({"success": True, "data": static_scan_logs})
+
 # ==================== MAIN ====================
 
 if __name__ == "__main__":
@@ -250,6 +260,7 @@ if __name__ == "__main__":
     print(f"  Model loaded: {monitor.model_loaded}")
     print("  Auto-Kill Engine: READY (Default: OFF)")
     print("  Honeypot Canary: ACTIVE (Canary Directory Protected)")
+    print("  EMBER Static Scanner: ACTIVE (Monitoring Downloads)")
     print("=" * 60 + "\n")
 
     try:

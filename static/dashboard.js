@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSystemStatus();
     loadModelInfo();
     statusInterval = setInterval(checkSystemStatus, 3000);
+    setInterval(pollStaticLogs, 2000);
 });
 
 // === API Helpers ===
@@ -276,4 +277,50 @@ function clearLog() {
             <p>No detection events yet. Start monitoring to see activity.</p>
         </div>
     `;
+}
+
+// === EMBER Static Logs ===
+let lastStaticLogTime = 0;
+
+async function pollStaticLogs() {
+    const result = await fetchAPI('/api/static-logs');
+    if (result.success && result.logs && result.logs.length > 0) {
+        const logContainer = document.getElementById('emberLog');
+        
+        result.logs.forEach(log => {
+            // Only show new logs
+            if (log.timestamp > lastStaticLogTime) {
+                lastStaticLogTime = log.timestamp;
+                
+                const isEmpty = logContainer.querySelector('.log-empty');
+                if (isEmpty) isEmpty.remove();
+                
+                const timeStr = new Date(log.timestamp * 1000).toLocaleTimeString();
+                
+                // Determine class based on event string
+                let className = 'safe';
+                if (log.event.includes('QUARANTINED') || log.event.includes('MALICIOUS')) {
+                    className = 'danger';
+                } else if (log.event.includes('Analyzing')) {
+                    className = 'warning';
+                }
+
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${className}`;
+                entry.innerHTML = `
+                    <div style="display: flex; gap: 12px; width: 100%; align-items: flex-start;">
+                        <span class="log-time" style="white-space: nowrap;">${timeStr}</span>
+                        <span class="log-message" style="flex: 1; word-break: break-all;">${log.event}</span>
+                    </div>
+                `;
+                
+                logContainer.insertBefore(entry, logContainer.firstChild);
+                
+                // Keep only last 20 entries
+                while (logContainer.children.length > 20) {
+                    logContainer.removeChild(logContainer.lastChild);
+                }
+            }
+        });
+    }
 }

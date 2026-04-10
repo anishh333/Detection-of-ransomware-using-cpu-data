@@ -23,6 +23,7 @@ const labels = [];
 document.addEventListener('DOMContentLoaded', () => {
     initCharts();
     checkStatus();
+    setInterval(pollStaticLogs, 2000);
 });
 
 async function checkStatus() {
@@ -416,5 +417,52 @@ async function ignoreProcess(pid) {
         }
     } catch (e) {
         alert('Failed to ignore process.');
+    }
+}
+
+// === EMBER Static Logs ===
+let lastStaticLogTime = 0;
+
+async function pollStaticLogs() {
+    try {
+        const result = await fetch('/api/static-logs').then(r => r.json());
+        if (result.success && result.logs && result.logs.length > 0) {
+            const logContainer = document.getElementById('emberLog');
+            
+            result.logs.forEach(log => {
+                if (log.timestamp > lastStaticLogTime) {
+                    lastStaticLogTime = log.timestamp;
+                    
+                    const isEmpty = logContainer.querySelector('.log-empty');
+                    if (isEmpty) isEmpty.remove();
+                    
+                    const timeStr = new Date(log.timestamp * 1000).toLocaleTimeString();
+                    
+                    let className = 'safe';
+                    if (log.event.includes('QUARANTINED') || log.event.includes('MALICIOUS')) {
+                        className = 'danger';
+                    } else if (log.event.includes('Analyzing')) {
+                        className = 'warning';
+                    }
+
+                    const entry = document.createElement('div');
+                    entry.className = `log-entry ${className}`;
+                    entry.innerHTML = `
+                        <div style="display: flex; gap: 12px; width: 100%; align-items: flex-start;">
+                            <span class="log-time" style="white-space: nowrap;">${timeStr}</span>
+                            <span class="log-message" style="flex: 1; word-break: break-all;">${log.event}</span>
+                        </div>
+                    `;
+                    
+                    logContainer.insertBefore(entry, logContainer.firstChild);
+                    
+                    while (logContainer.children.length > 20) {
+                        logContainer.removeChild(logContainer.lastChild);
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        console.error("Error fetching static logs: ", e);
     }
 }
