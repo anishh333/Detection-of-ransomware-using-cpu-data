@@ -1,0 +1,771 @@
+' ╔══════════════════════════════════════════════════════════════════════╗
+' ║  RANSOMWARE DETECTION SYSTEM — UML DESIGN DIAGRAMS (PlantUML)      ║
+' ║  Based on: Thummapudi et al., IEEE Access 2023                     ║
+' ║  "Detection of Ransomware Attacks Using Processor and Disk Data"   ║
+' ╚══════════════════════════════════════════════════════════════════════╝
+
+' ============================================================================
+' ██  1. CLASS DIAGRAM — Structural
+' ============================================================================
+@startuml ClassDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam classAttributeIconSize 0
+skinparam classFontSize 13
+skinparam classHeaderBackgroundColor #2563EB
+skinparam classHeaderFontColor #FFFFFF
+skinparam classStereotypeFontColor #6B7280
+skinparam shadowing true
+skinparam roundCorner 12
+skinparam linetype ortho
+
+title <b>Class Diagram</b>\nRansomware Detection System — Structural View
+
+package "Web Layer" #E0F2FE {
+    class FlaskApp <<Controller>> {
+        - app : Flask
+        - monitor : SystemMonitor
+        __
+        + index() : HTML
+        + training_page() : HTML
+        + monitoring_page() : HTML
+        + about_page() : HTML
+        + api_system_status() : JSON
+        + api_detect() : JSON
+        + api_model_info() : JSON
+        + api_model_results() : JSON
+        + api_train() : JSON
+        + api_detection_history() : JSON
+        + api_kill_process() : JSON
+        + api_hpc_events() : JSON
+        + api_io_events() : JSON
+    }
+}
+
+package "Core Engine" #F0FDF4 {
+    class SystemMonitor <<Service>> {
+        - sampling_interval : float
+        - window_size : int
+        - io_window_size : int
+        - hpc_buffer : dict<str, deque>
+        - io_buffer : dict<str, deque>
+        - model : sklearn.BaseEstimator
+        - scaler : StandardScaler
+        - model_info : dict
+        - model_loaded : bool
+        - is_monitoring : bool
+        - detection_history : list
+        __
+        + collect_sample() : tuple
+        + compute_features() : dict
+        + predict(features: dict) : tuple
+        + get_system_status() : dict
+        + run_detection_cycle() : dict
+        - _identify_threat() : dict
+    }
+}
+
+package "ML Pipeline" #FEF3C7 {
+    class MLModels <<Service>> {
+        {static} + get_feature_columns(model_type: str) : list
+        {static} + prepare_data(dataset, model_type, ...) : tuple
+        {static} + get_classifier(name: str) : Classifier
+        {static} + evaluate_model(y_true, y_pred, y_prob) : dict
+        {static} + compute_time_to_detect(model, ...) : list
+        {static} + train_all_models(dataset: DataFrame) : tuple
+        {static} + train_and_save() : dict
+    }
+
+    class DataGenerator <<Utility>> {
+        {static} + generate_hpc_raw_samples(app_type, workload, n) : dict
+        {static} + generate_io_raw_samples(app_type, workload, n) : dict
+        {static} + compute_statistical_features(raw: dict) : dict
+        {static} + generate_trace(app_name, app_type, ...) : DataFrame
+        {static} + generate_dataset(num_rounds: int) : DataFrame
+    }
+}
+
+package "Configuration" #F5F3FF {
+    class Config <<Singleton>> {
+        + BASE_DIR : str
+        + DATA_DIR : str
+        + MODEL_DIR : str
+        + STATIC_DIR : str
+        + TEMPLATE_DIR : str
+        + HPC_EVENTS : list
+        + IO_EVENTS : list
+        + STAT_FEATURES : list
+        + CLASSIFIERS : list
+        + RANSOMWARE_FAMILIES : dict
+        + BENIGN_APPS : list
+        + FLASK_HOST : str
+        + FLASK_PORT : int
+    }
+}
+
+package "Threat Simulation" #FEE2E2 {
+    class DummyThreat <<TestUtility>> {
+        {static} + simulate_io_spike() : void
+    }
+}
+
+' ── Relationships ──
+FlaskApp "1" *-- "1" SystemMonitor : owns >
+FlaskApp ..> MLModels : <<uses>> triggers training
+FlaskApp ..> DataGenerator : <<uses>> generates data
+SystemMonitor --> MLModels : loads trained model
+MLModels --> DataGenerator : requests dataset
+MLModels ..> Config : reads configuration
+SystemMonitor ..> Config : reads configuration
+DataGenerator ..> Config : reads configuration
+DummyThreat ..> SystemMonitor : simulates threat for
+
+note right of FlaskApp
+  Entry point: <b>app.py</b>
+  Serves REST API + HTML templates
+  via Flask on port 5000
+end note
+
+note bottom of SystemMonitor
+  Uses <b>psutil</b> for real-time
+  CPU & Disk I/O metrics collection.
+  Maps hardware counters to
+  HPC event features.
+end note
+
+@enduml
+
+
+' ============================================================================
+' ██  2. OBJECT DIAGRAM — Structural
+' ============================================================================
+@startuml ObjectDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam objectBorderColor #1E40AF
+skinparam objectBackgroundColor #EFF6FF
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Object Diagram</b>\nRuntime Snapshot — Active Detection Cycle
+
+object "app : FlaskApp" as app {
+    host = "127.0.0.1"
+    port = 5000
+    debug = True
+}
+
+object "monitor : SystemMonitor" as monitor {
+    sampling_interval = 0.2
+    window_size = 40
+    io_window_size = 10
+    model_loaded = True
+    is_monitoring = True
+}
+
+object "model : RandomForestClassifier" as model {
+    n_estimators = 100
+    random_state = 42
+}
+
+object "scaler : StandardScaler" as scaler {
+    mean_ = [...]
+    scale_ = [...]
+}
+
+object "model_info : dict" as info {
+    classifier = "Random Forest"
+    model_type = "integrated"
+    balanced_accuracy = 0.9876
+    trained_at = "2026-03-25T..."
+}
+
+object "hpc_buffer : dict<deque>" as hpc {
+    LLC-stores = deque([5120, 4980, ...])
+    L1-icache-load-misses = deque([...])
+    branch-load-misses = deque([...])
+    node-load-misses = deque([...])
+    instructions = deque([...])
+}
+
+object "io_buffer : dict<deque>" as io {
+    rd_req = deque([152, 148, ...])
+    wr_bytes = deque([204800, ...])
+    flush_req = deque([12, 15, ...])
+}
+
+object "detection_result : dict" as result {
+    prediction = 1
+    probability = 0.92
+    is_ransomware = True
+    timestamp = 1711388800.0
+}
+
+object "threat_info : dict" as threat {
+    name = "suspicious.exe"
+    pid = 4832
+    path = "C:\\Users\\...\\AppData\\..."
+    category = "High Disk Write Anomaly"
+    is_signed = False
+}
+
+app --> monitor
+monitor --> model
+monitor --> scaler
+monitor --> info
+monitor --> hpc
+monitor --> io
+result --> threat : "threat detected"
+monitor ..> result : produces
+
+@enduml
+
+
+' ============================================================================
+' ██  3. COMPONENT DIAGRAM — Structural
+' ============================================================================
+@startuml ComponentDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle uml2
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Component Diagram</b>\nRansomware Detection System — High-Level Architecture
+
+package "<<subsystem>>\nPresentation Layer" as PL #E0F2FE {
+    component [Dashboard\n//index.html//] as dash
+    component [Training Console\n//training.html//] as train_ui
+    component [Live Monitor\n//monitoring.html//] as mon_ui
+    component [About / Docs\n//about.html//] as about_ui
+    component [Client Scripts\n//dashboard.js\nmonitoring.js\ntraining.js//] as js
+}
+
+package "<<subsystem>>\nApplication Layer" as AL #F0FDF4 {
+    component [Flask REST API\n//app.py//] as api
+    component [System Monitor\n//monitor.py//] as mon
+}
+
+package "<<subsystem>>\nML Pipeline" as ML #FEF3C7 {
+    component [Model Trainer\n//ml_models.py//] as trainer
+    component [Data Generator\n//data_generator.py//] as datagen
+}
+
+package "<<subsystem>>\nData & Persistence" as DP #F5F3FF {
+    database "Model Store\n//models/*.pkl//" as modeldb
+    database "Dataset\n//data/*.csv//" as datadb
+    database "Results\n//models/*.json//" as resultsdb
+}
+
+package "<<subsystem>>\nOS / Hardware" as OS #FEE2E2 {
+    component [psutil\nSystem Metrics] as psutil
+    component [CPU / Disk\nHardware] as hw
+}
+
+' ── Interfaces & Connections ──
+js --> api : <<HTTP/JSON>>
+dash --> js
+mon_ui --> js
+train_ui --> js
+
+api --> mon : collect & predict
+api --> trainer : trigger training
+
+mon --> psutil : read metrics
+psutil --> hw : system calls
+
+trainer --> datagen : generate data
+trainer --> modeldb : save model
+trainer --> resultsdb : save results
+datagen --> datadb : persist CSV
+mon --> modeldb : load model
+
+note bottom of api
+  <b>Endpoints:</b>
+  /api/detect
+  /api/system-status
+  /api/train
+  /api/model-info
+  /api/kill-process
+  /api/detection-history
+end note
+
+@enduml
+
+
+' ============================================================================
+' ██  4. DEPLOYMENT DIAGRAM — Structural
+' ============================================================================
+@startuml DeploymentDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam nodeBackgroundColor #EFF6FF
+skinparam shadowing true
+skinparam roundCorner 12
+
+title <b>Deployment Diagram</b>\nRansomware Detection System — Physical Architecture
+
+node "<<device>>\nUser Workstation (Windows)" as pc {
+
+    node "<<execution environment>>\nPython 3.x Runtime" as python {
+
+        artifact "app.py" as app_art
+        artifact "monitor.py" as mon_art
+        artifact "ml_models.py" as ml_art
+        artifact "data_generator.py" as dg_art
+        artifact "config.py" as cfg_art
+
+        node "<<server>>\nFlask Dev Server\n127.0.0.1:5000" as flask {
+            component [REST API\nController] as api
+            component [Jinja2\nTemplate Engine] as jinja
+        }
+
+        node "<<library>>\nML Runtime" as mlrt {
+            component [scikit-learn] as sklearn
+            component [XGBoost] as xgb
+            component [joblib] as jl
+        }
+
+        node "<<library>>\nSystem Interface" as syslib {
+            component [psutil] as psutil
+            component [numpy] as np
+        }
+    }
+
+    node "<<file system>>\nLocal Storage" as fs {
+        folder "models/" as mdir {
+            artifact "best_model.pkl" as bm
+            artifact "scaler.pkl" as sc
+            artifact "model_info.json" as mi
+            artifact "all_results.json" as ar
+        }
+        folder "data/" as ddir {
+            artifact "ransomware_dataset.csv" as ds
+        }
+        folder "templates/" as tdir {
+            artifact "index.html"
+            artifact "monitoring.html"
+            artifact "training.html"
+            artifact "about.html"
+        }
+        folder "static/" as sdir {
+            artifact "dashboard.js"
+            artifact "monitoring.js"
+            artifact "training.js"
+        }
+    }
+}
+
+node "<<device>>\nClient Browser" as browser {
+    component [Web Dashboard\nHTML5 / JS] as ui
+}
+
+' ── Connections ──
+browser -- flask : <<HTTP>>\nport 5000
+flask --> fs : read/write
+mlrt --> mdir : load/save
+api --> psutil : system calls
+dg_art --> ddir : write CSV
+
+@enduml
+
+
+' ============================================================================
+' ██  5. USE CASE DIAGRAM — Behavioral
+' ============================================================================
+@startuml UseCaseDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam actorStyle awesome
+skinparam usecaseBackgroundColor #EFF6FF
+skinparam usecaseBorderColor #1E40AF
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Use Case Diagram</b>\nRansomware Detection System — Actor Interactions
+
+left to right direction
+
+actor "Security\nAnalyst" as user <<Primary>>
+actor "System\nAdministrator" as admin <<Primary>>
+actor "psutil\nOS Interface" as psutil <<Secondary>>
+actor "ML Model\nEngine" as ml <<Secondary>>
+
+rectangle "Ransomware Detection System" as system {
+
+    usecase "View Dashboard" as UC1
+    usecase "Monitor System\nin Real-Time" as UC2
+    usecase "Run Detection\nCycle" as UC3
+    usecase "View Detection\nHistory" as UC4
+    usecase "Train ML\nModels" as UC5
+    usecase "View Model\nResults" as UC6
+    usecase "Generate\nTraining Data" as UC7
+    usecase "Identify\nThreat Process" as UC8
+    usecase "Terminate\nSuspicious Process" as UC9
+    usecase "View System\nStatus" as UC10
+    usecase "View HPC/IO\nEvent Info" as UC11
+
+    ' ── User interactions ──
+    user --> UC1
+    user --> UC2
+    user --> UC4
+    user --> UC6
+    user --> UC11
+    admin --> UC5
+    admin --> UC9
+
+    ' ── Include / Extend ──
+    UC2 ..> UC3 : <<include>>
+    UC3 ..> UC10 : <<include>>
+    UC3 ..> UC8 : <<extend>>\n[threat detected]
+    UC8 ..> UC9 : <<extend>>\n[user confirms]
+    UC5 ..> UC7 : <<include>>\n[if no dataset]
+
+    ' ── System actors ──
+    UC3 --> ml : classify
+    UC10 --> psutil : collect metrics
+    UC8 --> psutil : scan processes
+}
+
+@enduml
+
+
+' ============================================================================
+' ██  6. SEQUENCE DIAGRAM — Behavioral
+' ============================================================================
+@startuml SequenceDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam sequenceMessageAlign center
+skinparam sequenceArrowThickness 2
+skinparam participantPadding 12
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Sequence Diagram</b>\nReal-Time Ransomware Detection Flow
+
+actor "User" as user
+participant "Browser\n//dashboard.js//" as browser #E0F2FE
+participant "Flask API\n//app.py//" as api #F0FDF4
+participant "SystemMonitor\n//monitor.py//" as monitor #FEF3C7
+participant "psutil\n//OS Layer//" as psutil #F5F3FF
+participant "ML Model\n//RandomForest//" as model #FEE2E2
+
+== Periodic Monitoring Loop (every 2s) ==
+
+user -> browser : Open Dashboard
+activate browser
+
+loop Every 2 seconds
+    browser -> api : GET /api/detect
+    activate api
+
+    api -> monitor : run_detection_cycle()
+    activate monitor
+
+    monitor -> psutil : cpu_percent(), cpu_times(),\ncpu_stats(), cpu_freq()
+    activate psutil
+    psutil --> monitor : CPU metrics
+    deactivate psutil
+
+    monitor -> psutil : disk_io_counters()
+    activate psutil
+    psutil --> monitor : Disk I/O metrics
+    deactivate psutil
+
+    monitor -> monitor : Map metrics → HPC/IO events\ncompute_features()
+
+    monitor -> model : predict(features)
+    activate model
+    model -> model : scaler.transform(X)
+    model -> model : predict_proba(X_scaled)
+    model --> monitor : (prediction=1, probability=0.92)
+    deactivate model
+
+    alt prediction == 1 (Ransomware Detected!)
+        monitor -> psutil : process_iter()\nscan all processes
+        activate psutil
+        psutil --> monitor : process list
+        deactivate psutil
+        monitor -> monitor : _identify_threat()\nrank by CPU/IO
+        monitor --> api : {is_ransomware: true,\nthreat_info: {...}}
+    else prediction == 0 (Benign)
+        monitor --> api : {is_ransomware: false}
+    end
+
+    deactivate monitor
+    api --> browser : JSON response
+    deactivate api
+    browser -> browser : Update UI charts,\nshow alert if threat
+end
+
+== Kill Process Flow ==
+
+user -> browser : Click "Stop Threat"
+browser -> api : POST /api/kill-process\n{pid: 4832}
+activate api
+api -> api : Validate PID\nCheck protected list\nCheck ownership
+api -> psutil : Process.terminate()
+psutil --> api : OK
+api --> browser : {success: true}
+deactivate api
+browser --> user : ✔ Process terminated
+
+@enduml
+
+
+' ============================================================================
+' ██  7. COLLABORATION (COMMUNICATION) DIAGRAM — Behavioral
+' ============================================================================
+@startuml CollaborationDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam objectBorderColor #1E40AF
+skinparam objectBackgroundColor #EFF6FF
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Collaboration (Communication) Diagram</b>\nModel Training Workflow
+
+object "admin : User" as admin
+object "browser : Client" as browser #E0F2FE
+object "api : FlaskApp" as api #F0FDF4
+object "trainer : MLModels" as trainer #FEF3C7
+object "datagen : DataGenerator" as datagen #FEF3C7
+object "config : Config" as config #F5F3FF
+object "filesystem : Storage" as fs #F5F3FF
+object "monitor : SystemMonitor" as monitor #F0FDF4
+
+admin --> browser : 1: click "Train Models"
+browser --> api : 2: POST /api/train
+api --> datagen : 3: [no dataset] generate_dataset()
+datagen --> config : 3.1: read HPC_EVENTS, IO_EVENTS, \nRANSOMWARE_FAMILIES
+datagen --> fs : 3.2: save ransomware_dataset.csv
+api --> trainer : 4: train_and_save()
+trainer --> fs : 4.1: load ransomware_dataset.csv
+trainer --> config : 4.2: read CLASSIFIERS, STAT_FEATURES
+trainer --> trainer : 4.3: prepare_data()\ntrain RF, SVM, DT, kNN, XGBoost
+trainer --> trainer : 4.4: evaluate_model()\ncompute metrics
+trainer --> fs : 4.5: save best_model.pkl,\nscaler.pkl, model_info.json
+api --> monitor : 5: reinitialize SystemMonitor()\nreload trained model
+monitor --> fs : 5.1: load best_model.pkl
+api --> browser : 6: {success: true}
+browser --> admin : 7: display "Training Complete"
+
+@enduml
+
+
+' ============================================================================
+' ██  8. ACTIVITY DIAGRAM — Behavioral
+' ============================================================================
+@startuml ActivityDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam activityBackgroundColor #EFF6FF
+skinparam activityBorderColor #1E40AF
+skinparam activityDiamondBackgroundColor #FEF3C7
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>Activity Diagram</b>\nEnd-to-End Ransomware Detection Pipeline
+
+start
+
+partition "Data Preparation" #E0F2FE {
+    :Load configuration\n(HPC_EVENTS, IO_EVENTS, STAT_FEATURES);
+    if (Dataset exists?) then (yes)
+        :Load ransomware_dataset.csv;
+    else (no)
+        :Generate synthetic traces\n(22 ransomware + 4 benign)\n× 6 workloads × 7 rounds;
+        :Compute statistical features\n(mean, median, std, IQR)\nper HPC & I/O event;
+        :Save dataset to CSV;
+    endif
+}
+
+partition "Model Training" #F0FDF4 {
+    :Split data → Train (5 rounds)\n+ Test (2 rounds);
+    :Apply StandardScaler\nnormalization;
+
+    fork
+        :Train Random Forest;
+    fork again
+        :Train SVM (RBF);
+    fork again
+        :Train Decision Tree;
+    fork again
+        :Train kNN (k=5);
+    fork again
+        :Train XGBoost;
+    end fork
+
+    :Evaluate all classifiers\n(Balanced Accuracy, F1,\nPrecision, Recall, FPR, FNR);
+    :Select best model\n(highest balanced accuracy);
+    :Persist best_model.pkl,\nscaler.pkl, model_info.json;
+}
+
+partition "Real-Time Detection" #FEF3C7 {
+    :Load trained model\ninto SystemMonitor;
+
+    repeat
+        :Collect CPU metrics via psutil\n(cpu_percent, cpu_times, cpu_stats);
+        :Collect Disk I/O metrics via psutil\n(disk_io_counters);
+        :Map raw metrics →\nHPC & I/O event features;
+        :Append to sliding-window buffers\n(HPC: 40 samples, I/O: 10 samples);
+        :Compute statistical features\nfrom buffer windows;
+        :Scale features with\ntrained StandardScaler;
+        :Run ML prediction\n→ (label, probability);
+
+        if (prediction == 1 ?) then (Ransomware!)
+            #FF6B6B:Scan processes\n(psutil.process_iter);
+            :Rank by CPU% + I/O write bytes;
+            :Filter out protected\nsystem processes;
+            :Identify suspect process\n(name, PID, path, category);
+            :Display threat alert\n(color-coded by severity);
+
+            if (User confirms kill?) then (yes)
+                :Validate PID & ownership;
+                :Terminate process\n(psutil.Process.terminate);
+            else (no)
+                :Log and continue monitoring;
+            endif
+        else (Benign)
+            :Update dashboard\nwith green status;
+        endif
+
+    repeat while (Monitoring active?) is (yes)
+}
+
+stop
+
+@enduml
+
+
+' ============================================================================
+' ██  9. STATE CHART DIAGRAM — Behavioral
+' ============================================================================
+@startuml StateChartDiagram
+!theme cerulean-outline
+skinparam backgroundColor #FAFAFA
+skinparam stateBackgroundColor #EFF6FF
+skinparam stateBorderColor #1E40AF
+skinparam shadowing true
+skinparam roundCorner 10
+
+title <b>State Chart Diagram</b>\nSystemMonitor — Lifecycle States
+
+[*] --> Uninitialized
+
+state Uninitialized #F3F4F6 {
+    Uninitialized : No model loaded
+    Uninitialized : model_loaded = False
+}
+
+Uninitialized --> ModelLoading : __init__() called\n[model files exist]
+Uninitialized --> NoModel : __init__() called\n[model files missing]
+
+state NoModel #FEE2E2 {
+    NoModel : model = None
+    NoModel : scaler = None
+    NoModel : model_loaded = False
+}
+
+state ModelLoading #FEF3C7 {
+    ModelLoading : Loading best_model.pkl
+    ModelLoading : Loading scaler.pkl
+    ModelLoading : Parsing model_info.json
+}
+
+ModelLoading --> Ready : Load successful
+ModelLoading --> NoModel : Load failed
+
+NoModel --> TrainingInProgress : /api/train triggered
+
+state TrainingInProgress #FDE68A {
+    state "Generating Data" as GenData
+    state "Training Classifiers" as TrainCLF
+    state "Evaluating Models" as EvalMod
+    state "Saving Best Model" as SaveModel
+
+    [*] --> GenData : [no dataset]
+    GenData --> TrainCLF : dataset ready
+    [*] --> TrainCLF : [dataset exists]
+    TrainCLF --> EvalMod : all classifiers trained
+    EvalMod --> SaveModel : best model selected
+    SaveModel --> [*]
+}
+
+TrainingInProgress --> Ready : Training complete\nReload SystemMonitor
+
+state Ready #D1FAE5 {
+    Ready : model_loaded = True
+    Ready : Awaiting detection request
+}
+
+Ready --> Collecting : /api/detect called
+
+state Collecting #DBEAFE {
+    Collecting : collect_sample()
+    Collecting : Reading CPU & Disk I/O
+    Collecting : via psutil
+}
+
+Collecting --> Computing : Raw samples buffered
+
+state Computing #E0E7FF {
+    Computing : compute_features()
+    Computing : mean, median, std, IQR
+    Computing : per HPC & I/O event
+}
+
+Computing --> Predicting : Features computed
+
+state Predicting #FEF3C7 {
+    Predicting : predict(features)
+    Predicting : scaler.transform → model.predict
+}
+
+Predicting --> ThreatDetected : prediction == 1\n[probability ≥ 0.5]
+Predicting --> Safe : prediction == 0
+
+state Safe #D1FAE5 {
+    Safe : is_ransomware = False
+    Safe : Update dashboard (green)
+}
+
+state ThreatDetected #FEE2E2 {
+    state "Scanning Processes" as Scan
+    state "Ranking Suspects" as Rank
+    state "Threat Identified" as Identified
+
+    [*] --> Scan : _identify_threat()
+    Scan --> Rank : process list obtained
+    Rank --> Identified : highest CPU/IO found
+    Identified --> [*]
+}
+
+Safe --> Ready : Cycle complete\nReturn result
+ThreatDetected --> AwaitingAction : Threat info prepared
+
+state AwaitingAction #FDE68A {
+    AwaitingAction : Alert displayed to user
+    AwaitingAction : "Stop Threat" button available
+}
+
+AwaitingAction --> ProcessTermination : User clicks "Stop Threat"
+AwaitingAction --> Ready : User dismisses\nor next cycle
+
+state ProcessTermination #FCA5A5 {
+    state "Validating PID" as ValPID
+    state "Checking Protected List" as ChkProt
+    state "Terminating Process" as TermProc
+
+    [*] --> ValPID
+    ValPID --> ChkProt : PID valid
+    ChkProt --> TermProc : Not protected
+    ChkProt --> [*] : Protected → deny
+    TermProc --> [*] : Process killed
+}
+
+ProcessTermination --> Ready : Action complete
+
+@enduml

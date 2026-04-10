@@ -1,0 +1,337 @@
+# 🛡️ RansomShield — Complete Project Explanation (Review Prep)
+
+---
+
+## 1. What Is This Project?
+
+This project is a **ransomware detection system** that identifies ransomware attacks by monitoring **CPU (processor)** and **Disk I/O** activity on a computer. Instead of scanning files for signatures (like a traditional antivirus), it watches *how the computer behaves* internally.
+
+> **Key idea:** Ransomware encrypts files, which creates *unusual patterns* in processor cache events and disk read/write activity. Our system learns these patterns using Machine Learning and flags them in real time.
+
+**Based on the research paper:**
+*"Detection of Ransomware Attacks Using Processor and Disk Usage Data"* — Thummapudi et al. (IEEE Access, 2023)
+
+---
+
+## 2. Why This Approach?
+
+| Traditional Antivirus | Our Approach |
+|---|---|
+| Relies on known signatures/hashes | Detects by **behaviour**, even unknown ransomware |
+| Can be evaded by obfuscated malware | Monitors low-level CPU & disk metrics that are hard to fake |
+| Needs constant database updates | Trained ML model generalises to new ransomware families |
+
+The paper found that **Hardware Performance Counters (HPCs)** and **Disk I/O stats** change significantly when ransomware runs — even under heavy system workloads.
+
+---
+
+## 3. Architecture Overview
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    USER / BROWSER                    │
+│          http://127.0.0.1:5000  (Dashboard)          │
+└──────────────────┬───────────────────────────────────┘
+                   │  HTTP requests
+                   ▼
+┌──────────────────────────────────────────────────────┐
+│              app.py  (Flask Web Server)               │
+│   Routes: /  /training  /monitoring  /about           │
+│   APIs:   /api/detect  /api/train  /api/system-status │
+└──────┬───────────────────────────────┬───────────────┘
+       │                               │
+       ▼                               ▼
+┌──────────────┐              ┌─────────────────┐
+│  monitor.py  │              │  ml_models.py   │
+│  (psutil)    │              │  (scikit-learn,  │
+│  Live system │              │   XGBoost)       │
+│  metrics     │              │  Training &      │
+│  collection  │              │  evaluation      │
+└──────┬───────┘              └────────┬────────┘
+       │                               │
+       │  loads model                  │  reads data
+       ▼                               ▼
+┌──────────────────────────────────────────────────────┐
+│                    models/ directory                  │
+│  best_model.pkl  scaler.pkl  model_info.json         │
+└──────────────────────────────────────────────────────┘
+       ▲
+       │  generates
+┌──────┴───────┐        ┌──────────────┐
+│data_generator│ ──────►│ data/        │
+│   .py        │        │ data_file.csv│
+└──────────────┘        └──────────────┘
+```
+
+---
+
+## 4. File-by-File Explanation
+
+### 4.1 [config.py](file:///d:/Major_project/config.py) — Configuration Hub
+
+This is the **central settings file**. Everything else reads from here.
+
+**What it defines:**
+- **Directory paths** — where data, models, templates, and static files live
+- **5 HPC events** monitored: `LLC-stores`, `L1-icache-load-misses`, `branch-load-misses`, `node-load-misses`, `instructions`
+- **8 Disk I/O events**: `rd_req`, `rd_bytes`, `wr_req`, `wr_bytes`, `flush_req`, `flush_total_times`, `rd_total_times`, `wr_total_times`
+- **4 statistical features** computed per event: `mean`, `median`, `std`, `iqr`
+- **Sampling intervals** (5 ms for HPC, 20 ms for I/O) — matching the paper
+- **ML settings**: 70/30 train-test split, random state = 42
+- **10 ransomware families**: Sodinokibi, Netwalker, Ryuk, Conti, LockBit, DarkSide, BlackMatter, REvil, Maze, WannaCry
+- **4 benign apps**: 7zip, aesCrypt, sDelete, dryRun
+- **6 workload types**: Base Load, CPU-intensive (×3), Network-intensive (×2)
+- Flask host/port settings
+
+---
+
+### 4.2 [data_generator.py](file:///d:/Major_project/data_generator.py) — Simulated Dataset Creation
+
+Since we can't run actual ransomware on our machines, this file **simulates realistic data** based on the paper's descriptions.
+
+**How it works, step by step:**
+
+1. **[generate_hpc_raw_samples(app_type, workload)](file:///d:/Major_project/data_generator.py#21-73)**
+   - Generates 40 raw HPC samples per 200 ms window
+   - Ransomware samples have *higher* cache misses, branch misses, and instruction counts
+   - Workload type shifts the baseline (CPU-intensive → higher baseline for everything)
+
+2. **[generate_io_raw_samples(app_type, workload)](file:///d:/Major_project/data_generator.py#75-119)**
+   - Generates 10 raw I/O samples per 200 ms window
+   - Ransomware shows *heavy read + write* activity (file encryption pattern)
+
+3. **[compute_statistical_features(raw_samples)](file:///d:/Major_project/data_generator.py#121-133)**
+   - Takes raw samples → computes **mean, median, std, IQR** for each event
+   - This is the paper's **Section III-B** methodology
+
+4. **[generate_trace(app_name, app_type, workload)](file:///d:/Major_project/data_generator.py#135-157)**
+   - Creates a full 60-second trace = **300 instances** of features
+   - Each instance represents 200 ms of activity
+
+5. **[generate_dataset(num_rounds=7)](file:///d:/Major_project/data_generator.py#159-226)**
+   - Combines everything: **26 apps × 6 workloads × 7 rounds = 1092 traces**
+   - Labels: `1` = ransomware, `0` = benign
+   - Saves to [data/data_file.csv](file:///d:/Major_project/data/data_file.csv)
+
+> **Run:** `python data_generator.py`
+
+---
+
+### 4.3 [ml_models.py](file:///d:/Major_project/ml_models.py) — Model Training & Evaluation
+
+This is the **ML brain** of the project. It trains 5 classifiers in 3 modes.
+
+**Key functions:**
+
+1. **[get_feature_columns(model_type)](file:///d:/Major_project/ml_models.py#33-44)**
+   - Returns the list of feature names based on mode:
+     - `"hpc"` → 20 features (5 events × 4 stats)
+     - `"io"` → 32 features (8 events × 4 stats)
+     - `"integrated"` → 52 features (all combined)
+
+2. **[prepare_data(dataset, model_type)](file:///d:/Major_project/ml_models.py#46-85)**
+   - Splits data into **70% train / 30% test**
+   - Applies `StandardScaler` for feature normalisation
+   - Returns `X_train, X_test, y_train, y_test, scaler`
+
+3. **[get_classifier(name)](file:///d:/Major_project/ml_models.py#87-109)** — initialises one of:
+
+   | Classifier | Key Parameters |
+   |---|---|
+   | Random Forest | 100 trees, max_depth=20 |
+   | SVM | RBF kernel, C=10 |
+   | Decision Tree | max_depth=20 |
+   | kNN | 5 neighbours |
+   | XGBoost | 100 estimators, max_depth=6 |
+
+4. **[evaluate_model(y_true, y_pred)](file:///d:/Major_project/ml_models.py#111-140)**
+   - Computes: Balanced Accuracy, F1-Score, Precision, Recall, FPR, FNR, TP, FP, TN, FN, ROC-AUC
+
+5. **[train_all_models(dataset)](file:///d:/Major_project/ml_models.py#174-256)**
+   - Loops: **3 modes × 5 classifiers = 15 models trained**
+   - The best model (highest balanced accuracy on integrated data) is saved
+
+6. **[train_and_save()](file:///d:/Major_project/ml_models.py#258-287)**
+   - Loads data → calls [train_all_models()](file:///d:/Major_project/ml_models.py#174-256) → saves:
+     - [models/best_model.pkl](file:///d:/Major_project/models/best_model.pkl) (serialised model)
+     - [models/scaler.pkl](file:///d:/Major_project/models/scaler.pkl) (fitted scaler)
+     - [models/model_info.json](file:///d:/Major_project/models/model_info.json) (best model's metadata)
+     - [models/all_results.json](file:///d:/Major_project/models/all_results.json) (all 15 model results)
+
+> **Run:** `python ml_models.py`
+
+---
+
+### 4.4 [monitor.py](file:///d:/Major_project/monitor.py) — Real-Time System Monitor
+
+The [SystemMonitor](file:///d:/Major_project/monitor.py#17-193) class collects **live** system metrics and feeds them to the trained model.
+
+**How detection works in real time:**
+
+```
+collect_sample()  →  compute_features()  →  predict()
+      │                      │                   │
+  Uses psutil           Computes mean,      Loads best_model.pkl
+  to read CPU &         median, std, IQR    and scaler.pkl,
+  disk counters         over a sliding       runs prediction
+                        window of samples
+```
+
+**Metric mapping** (since we can't access real HPCs, `psutil` metrics are mapped):
+
+| HPC Event | psutil Approximation |
+|---|---|
+| LLC-stores | Context switches × CPU% |
+| L1-icache-load-misses | Interrupts × CPU% |
+| branch-load-misses | Soft interrupts × CPU% |
+| node-load-misses | System calls × CPU% |
+| instructions | User time + system time |
+
+**Disk I/O** is read directly from `psutil.disk_io_counters()`.
+
+**Detection cycle output:**
+```json
+{
+  "timestamp": 1709042000.5,
+  "prediction": 0,
+  "probability": 0.02,
+  "is_ransomware": false,
+  "hpc_sample": { ... },
+  "io_sample": { ... }
+}
+```
+
+---
+
+### 4.5 [app.py](file:///d:/Major_project/app.py) — Flask Web Application
+
+The web server that ties everything together.
+
+**4 Web Pages:**
+
+| Page | Route | What it shows |
+|---|---|---|
+| Dashboard | `/` | System overview — CPU, memory, disk charts |
+| Training | `/training` | Train models from the UI, view accuracy/F1/AUC results |
+| Monitoring | `/monitoring` | Live detection feed with ransomware alerts |
+| About | `/about` | Project documentation & methodology |
+
+**8 API Endpoints:**
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/system-status` | Current CPU/memory/disk metrics |
+| `GET /api/detect` | Runs one detection cycle, returns prediction |
+| `GET /api/model-info` | Returns trained model name, features, metrics |
+| `GET /api/model-results` | All 15 model evaluation results |
+| `POST /api/train` | Triggers full training pipeline |
+| `GET /api/detection-history` | Last N detection results |
+| `GET /api/hpc-events` | List of HPC event names |
+| `GET /api/io-events` | List of I/O event names |
+
+---
+
+### 4.6 Frontend (templates/ & static/)
+
+| File | Role |
+|---|---|
+| [index.html](file:///d:/Major_project/templates/index.html) | Dashboard layout with live CPU/memory/disk gauges |
+| [training.html](file:///d:/Major_project/templates/training.html) | Training controls + results tables/charts |
+| [monitoring.html](file:///d:/Major_project/templates/monitoring.html) | Real-time detection feed |
+| [about.html](file:///d:/Major_project/templates/about.html) | Documentation page |
+| [style.css](file:///d:/Major_project/static/style.css) | All styling (dark theme, cards, animations) |
+| [dashboard.js](file:///d:/Major_project/static/dashboard.js) | Fetches `/api/system-status`, updates charts |
+| [training.js](file:///d:/Major_project/static/training.js) | Handles train button, displays model results |
+| [monitoring.js](file:///d:/Major_project/static/monitoring.js) | Polls `/api/detect`, shows live predictions |
+
+---
+
+## 5. End-to-End Flow (How It All Connects)
+
+### Step 1 — Data Generation
+```
+data_generator.py  →  data/data_file.csv
+```
+Simulates 1092 traces of ransomware + benign activity with realistic HPC & I/O patterns.
+
+### Step 2 — Model Training
+```
+ml_models.py reads data_file.csv
+    → Trains 5 classifiers × 3 modes = 15 models
+    → Evaluates each with balanced accuracy, F1, etc.
+    → Saves best model to models/best_model.pkl
+    → Saves results to models/all_results.json + model_info.json
+```
+
+### Step 3 — Launch Dashboard
+```
+python app.py  →  Flask server starts on http://127.0.0.1:5000
+    → Loads best_model.pkl into SystemMonitor
+    → Serves web pages + API endpoints
+```
+
+### Step 4 — Live Detection
+```
+User opens /monitoring page
+    → monitoring.js polls /api/detect every few seconds
+    → monitor.py collects live CPU & disk data via psutil
+    → Computes 52 statistical features
+    → Feeds features into the trained model
+    → Returns prediction: ransomware (1) or benign (0)
+    → Dashboard shows real-time alerts
+```
+
+---
+
+## 6. Key Results (From Training)
+
+The best model is **Random Forest on Integrated (HPC + I/O) data**:
+
+| Metric | Score |
+|---|---|
+| Balanced Accuracy | **1.0** |
+| F1-Score | **1.0** |
+| Precision | **1.0** |
+| Recall | **1.0** |
+| FPR | **0.0** |
+| ROC-AUC | **1.0** |
+
+All 5 classifiers achieve near-perfect scores. Decision Tree has the lowest with 0.9999 balanced accuracy (2 FP, 1 FN out of ~93,600 samples).
+
+---
+
+## 7. Common Review Questions & Answers
+
+**Q: Why use HPC events instead of file signatures?**
+> HPCs capture low-level CPU behaviour (cache misses, branch misses) that ransomware can't easily hide. Signature-based methods miss zero-day or obfuscated ransomware.
+
+**Q: What are the 3 detection modes?**
+> **HPC-only** (20 features from CPU events), **I/O-only** (32 features from disk events), and **Integrated** (52 features combining both). Integrated is the most accurate.
+
+**Q: Why these 5 HPC events specifically?**
+> The paper tested many HPCs and found these 5 have the highest discriminative power between ransomware and benign apps, even under heavy workloads.
+
+**Q: How is the data collected?**
+> In the paper: via `perf stat` (HPC) and `virsh domblkstat` (I/O) on KVM VMs. In our implementation: simulated with realistic patterns, and live monitoring uses `psutil`.
+
+**Q: What is the 200 ms instance window?**
+> Each "instance" is a 200 ms time window. Within it, 40 HPC samples (every 5 ms) and 10 I/O samples (every 20 ms) are collected, then summarised into 4 statistical features each.
+
+**Q: Why Random Forest as the best model?**
+> It achieved perfect scores on the integrated dataset with no false positives or false negatives. Its ensemble of decision trees handles the feature space well.
+
+**Q: What workload types are tested?**
+> 6 types: Base Load (idle), CPU-intensive (10+ apps), and Network-intensive (30+ apps). This ensures detection works even when the system is under heavy legitimate load.
+
+**Q: How many ransomware families are covered?**
+> 10: Sodinokibi, Netwalker, Ryuk, Conti, LockBit, DarkSide, BlackMatter, REvil, Maze, WannaCry.
+
+**Q: What is the train/test split?**
+> 70% training, 30% testing, with `random_state=42` for reproducibility.
+
+**Q: What does the scaler do?**
+> `StandardScaler` normalises features to zero mean and unit variance, which is critical for SVM and kNN to work correctly (they're distance-sensitive).
+
+---
+
+*Good luck with your review! 🎯*
